@@ -57,14 +57,31 @@ We use **[mise](https://mise.jdx.dev/)** to manage language versions. Please ens
 To start the Rails server and the Vite dev server concurrently:
 
 ```bash
-# If mise is not activated in your shell automatically:
-mise exec -- bin/dev
-
-# Or if mise is active:
 bin/dev
 ```
 
 Visit `http://localhost:3000`.
+
+## Debugging: Split Logs with Tmux
+
+For a better development experience, it is recommended to run the Backend (Rails) and Frontend (Vite) in separate consoles. This keeps the logs clean and readable.
+
+**Manual Setup:**
+1.  Open **Terminal 1** (Backend):
+    ```bash
+    bin/rails s
+    ```
+2.  Open **Terminal 2** (Frontend):
+    ```bash
+    bin/vite dev
+    ```
+
+**Tmux One-Liner:**
+If you use `tmux`, you can launch both in a split view with a single command:
+
+```bash
+tmux new-session -s dev "bin/rails s" \; split-window -h "bin/vite dev" \; attach
+```
 
 ## Directory Structure
 
