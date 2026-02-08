@@ -1,8 +1,9 @@
 # 🗄️ База Данных IndustrialPROFI
 
-> **СУБД:** SQLite 3.45+ (с WAL mode)  
+> **СУБД:** PostgreSQL 16+  
 > **ORM:** ActiveRecord (Rails 8)  
-> **Миграции:** db/migrate/
+> **Миграции:** db/migrate/  
+> **Audit Trail:** paper_trail gem (версионирование изменений)
 
 ---
 
@@ -120,6 +121,11 @@ create_table :users do |t|
   t.string :department                           # "Сварочный цех", "ОТК"
   t.string :job_title                            # "Сварщик 5 разряда"
   
+  # ⭐ Интеграция с 1С:ЗУП (v2)
+  t.string :external_1c_id, index: true          # ID сотрудника в 1С
+  t.datetime :synced_from_1c_at                  # Последняя синхронизация
+  t.jsonb :metadata, default: {}                 # Дополнительные поля из 1С
+  
   # Метаданные
   t.datetime :last_sign_in_at
   t.string :locale, default: 'ru'
@@ -129,6 +135,22 @@ end
 
 add_index :users, :email, unique: true
 add_index :users, [:organization_id, :email]
+add_index :users, [:organization_id, :external_1c_id], unique: true, where: "external_1c_id IS NOT NULL"
+```
+
+**⭐ Новое для 1С интеграции:**
+- `external_1c_id` — связь с `Справочник.Сотрудники` в 1С
+- `synced_from_1c_at` — timestamp последней синхронизации
+- `metadata` — JSONB поле для хранения дополнительных данных из 1С (табельный номер, подразделение, etc)
+
+**Пример metadata:**
+```json
+{
+  "personnel_number": "00001234",
+  "1c_department_guid": "a3f4e5d6-1234-5678-abcd-ef1234567890",
+  "1c_position_guid": "b4f5e6d7-2345-6789-bcde-f12345678901",
+  "hire_date": "2020-01-15"
+}
 ```
 
 **Роли:**
@@ -559,22 +581,81 @@ PermitTemplate.create!([
 
 ---
 
-## 🔄 Миграция на PostgreSQL (Если Понадобится)
+## 📜 Audit Trail (paper_trail)
+
+### Таблица `versions` (Версионирование Изменений)
+
+**Назначение:** Tracking всех изменений критичных данных для compliance.
 
 ```ruby
-# Изменения минимальны:
-# 1. Gemfile: gem 'pg' вместо 'sqlite3'
-# 2. config/database.yml: adapter: postgresql
-# 3. Миграция данных через pgloader или custom rake task
-# 4. Замена JSON на JSONB для лучшей производительности
+create_table :versions do |t|
+  t.string   :item_type, null: false         # "UserProgress", "Skill", etc
+  t.bigint   :item_id,   null: false
+  t.string   :event,     null: false         # create, update, destroy
+  t.string   :whodunnit                      # user_id кто изменил
+  t.jsonb    :object                         # Состояние ДО изменения
+  t.jsonb    :object_changes                 # Что изменилось
+  t.jsonb    :metadata                       # Дополнительные данные (organization_id, ip_address)
+  t.datetime :created_at
+end
 
-# Миграция
-class ConvertJsonToJsonb < ActiveRecord::Migration[8.0]
-  def change
-    change_column :skills, :resources, :jsonb, using: 'resources::jsonb'
-  end
+add_index :versions, [:item_type, :item_id]
+add_index :versions, :whodunnit
+add_index :versions, :created_at
+add_index :versions, :metadata, using: :gin  # PostgreSQL GIN index для JSONB
+```
+
+**Какие модели отслеживаются:**
+- ✅ `UserProgress` — критично! (кто поставил допуск, когда)
+- ✅ `Skill` — изменения в roadmaps
+- ✅ `User` — изменения ролей, email
+- ❌ `Session` — не нужно (слишком много записей)
+
+**Использование в моделях:**
+```ruby
+class UserProgress < ApplicationRecord
+  has_paper_trail on: [:create, :update, :destroy],
+                  ignore: [:updated_at],
+                  meta: { 
+                    organization_id: :organization_id,
+                    ip_address: :current_ip 
+                  }
 end
 ```
+
+**Retention policy:**
+- Хранить минимум **2 года** (российское законодательство по охране труда)
+- Партиционирование по годам (PostgreSQL table partitioning)
+- Архивация старых версий в S3 Glacier
+
+**Пример запроса истории:**
+```ruby
+# В контроллере
+@history = @user_progress.versions.includes(:whodunnit).order(created_at: :desc)
+
+# В UI
+@history.each do |v|
+  user = User.find(v.whodunnit)
+  puts "#{v.created_at}: #{user.full_name} изменил #{v.changeset}"
+end
+```
+
+---
+
+## 🔄 PostgreSQL Преимущества
+
+**Почему сразу PostgreSQL, а не SQLite:**
+
+1. **JSONB** — быстрые запросы по `metadata`, `resources`
+2. **GIN indexes** — полнотекстовый поиск по русским навыкам
+3. **Table partitioning** — масштабирование `versions` таблицы
+4. **pgaudit** — готовность к enterprise compliance
+5. **Concurrent writes** — 100+ сотрудников одновременно
+
+**Миграция минимальна:**
+- Gemfile: `gem 'pg'` вместо `'sqlite3'`
+- database.yml: `adapter: postgresql`
+- Все миграции совместимы (ActiveRecord абстракция)
 
 ---
 

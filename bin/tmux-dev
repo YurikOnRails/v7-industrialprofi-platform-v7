@@ -1,0 +1,96 @@
+#!/bin/bash
+
+# Tmux Development Environment для Rails + Vite + Inertia
+# Использование: ./bin/tmux-dev
+
+SESSION_NAME="industrialprofi"
+WORK_DIR=$(pwd)
+
+# Проверка установлен ли tmux
+if ! command -v tmux &> /dev/null; then
+    echo "❌ tmux не установлен. Установите: sudo apt-get install tmux"
+    exit 1
+fi
+
+# Проверка существования сессии
+if tmux has-session -t $SESSION_NAME 2>/dev/null; then
+    echo "📌 Сессия '$SESSION_NAME' уже существует. Подключаюсь..."
+    tmux attach-session -t $SESSION_NAME
+    exit 0
+fi
+
+echo "🚀 Создаю tmux сессию '$SESSION_NAME'..."
+
+# Создаем новую сессию (detached)
+tmux new-session -d -s $SESSION_NAME -n "main" -c "$WORK_DIR"
+
+# ============================================
+# ПАНЕЛЬ 1: Rails Server (слева вверху)
+# ============================================
+tmux send-keys -t $SESSION_NAME:main "clear" C-m
+tmux send-keys -t $SESSION_NAME:main "echo '🛤️  Rails Server'" C-m
+tmux send-keys -t $SESSION_NAME:main "echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'" C-m
+tmux send-keys -t $SESSION_NAME:main "bin/rails s" C-m
+
+# ============================================
+# ПАНЕЛЬ 2: Vite Server (справа вверху)
+# ============================================
+tmux split-window -h -t $SESSION_NAME:main -c "$WORK_DIR"
+tmux send-keys -t $SESSION_NAME:main "clear" C-m
+tmux send-keys -t $SESSION_NAME:main "echo '⚡ Vite Dev Server'" C-m
+tmux send-keys -t $SESSION_NAME:main "echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'" C-m
+tmux send-keys -t $SESSION_NAME:main "bin/vite dev" C-m
+
+# ============================================
+# ПАНЕЛЬ 3: Terminal (внизу во всю ширину)
+# ============================================
+tmux split-window -v -t $SESSION_NAME:main.0 -c "$WORK_DIR"
+tmux send-keys -t $SESSION_NAME:main.2 "clear" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo '💻 Rails Console / Commands'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo 'Доступные команды:'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo '  rails c       - Rails консоль'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo '  rails db:...  - Database команды'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo '  rails routes  - Маршруты'" C-m
+tmux send-keys -t $SESSION_NAME:main.2 "echo ''" C-m
+
+# Настройка размеров панелей
+tmux resize-pane -t $SESSION_NAME:main.0 -y 20  # Rails server
+tmux resize-pane -t $SESSION_NAME:main.1 -y 20  # Vite server
+tmux resize-pane -t $SESSION_NAME:main.2 -y 15  # Terminal
+
+# ============================================
+# ДОПОЛНИТЕЛЬНОЕ ОКНО: Database (опционально)
+# ============================================
+tmux new-window -t $SESSION_NAME -n "db" -c "$WORK_DIR"
+tmux send-keys -t $SESSION_NAME:db "clear" C-m
+tmux send-keys -t $SESSION_NAME:db "echo '🗄️  Database Logs'" C-m
+tmux send-keys -t $SESSION_NAME:db "echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'" C-m
+tmux send-keys -t $SESSION_NAME:db "docker-compose logs -f postgres" C-m
+
+# ============================================
+# ДОПОЛНИТЕЛЬНОЕ ОКНО: Git (опционально)
+# ============================================
+tmux new-window -t $SESSION_NAME -n "git" -c "$WORK_DIR"
+tmux send-keys -t $SESSION_NAME:git "clear" C-m
+tmux send-keys -t $SESSION_NAME:git "echo '📦 Git & Utilities'" C-m
+tmux send-keys -t $SESSION_NAME:git "echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'" C-m
+tmux send-keys -t $SESSION_NAME:git "git status" C-m
+
+# Возвращаемся к главному окну
+tmux select-window -t $SESSION_NAME:main
+tmux select-pane -t $SESSION_NAME:main.2
+
+# Подключаемся к сессии
+echo "✅ Сессия создана!"
+echo ""
+echo "Управление tmux:"
+echo "  Ctrl+B, затем %     - разделить вертикально"
+echo "  Ctrl+B, затем \"     - разделить горизонтально"
+echo "  Ctrl+B, затем O     - переключить панель"
+echo "  Ctrl+B, затем [0-9] - переключить окно"
+echo "  Ctrl+B, затем D     - отключиться (detach)"
+echo "  tmux attach -t $SESSION_NAME - подключиться снова"
+echo ""
+
+tmux attach-session -t $SESSION_NAME

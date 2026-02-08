@@ -1,0 +1,55 @@
+# Docker Compose для local development
+# Запуск: docker-compose up -d
+# Остановка: docker-compose down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: industrialprofi_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: industrialprofi_development
+    ports:
+      - "5433:5432"  # Изменен на 5433 (5432 занят другим проектом)
+    volumes:
+      # Персистентный volume для данных
+      - postgres_data:/var/lib/postgresql/data
+      # Скрипт инициализации (создаем дополнительные БД)
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - industrialprofi
+
+  # pgAdmin (опционально, для GUI управления БД)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: industrialprofi_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@industrialprofi.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - industrialprofi
+    profiles:
+      - tools  # Запускается только с: docker-compose --profile tools up
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  industrialprofi:
+    driver: bridge

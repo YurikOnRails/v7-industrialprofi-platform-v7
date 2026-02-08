@@ -48,22 +48,43 @@ Week 5: Polish & Deploy         ████████████████
 
 ---
 
-### День 1: Database & Models
+### День 1: Database & Models (PostgreSQL + paper_trail)
+
+**⭐ Изменения:** Мигрировали на PostgreSQL с Day 1 для enterprise-ready архитектуры
 
 **Задачи:**
-- [ ] Установить gems: `acts_as_tenant`, `bcrypt`, `blueprinter`
+- [ ] Запустить PostgreSQL (Docker Compose)
+- [ ] Установить gems: `pg`, `acts_as_tenant`, `bcrypt`, `paper_trail`, `blueprinter`, `pagy`
 - [ ] Миграции: `organizations`, `users`, `sessions`
+- [ ] **НОВОЕ:** Установить paper_trail (audit trail)
+- [ ] **НОВОЕ:** Добавить `external_1c_id` в Users (для интеграции 1С)
 - [ ] Models с валидациями
 - [ ] Seeds для тестовой организации
 
 **Команды:**
 ```bash
-bundle add acts_as_tenant bcrypt blueprinter pagy
+# 1. Запустить PostgreSQL
+docker-compose up -d
 
-bin/rails g model Organization name:string slug:string:uniq plan_type:string
-bin/rails g model User organization:references email:string:uniq password_digest:string full_name:string role:string department:string
+# 2. Установить gems
+bundle install
+# (Gemfile уже обновлен: pg, paper_trail, acts_as_tenant, bcrypt, blueprinter, pagy)
+
+# 3. Создать БД
+bin/rails db:create
+
+# 4. Миграции основных таблиц
+bin/rails g model Organization name:string slug:string:uniq plan_type:string subscription_status:string
+
+# ⭐ ВАЖНО: User с полем для 1С интеграции!
+bin/rails g model User organization:references email:string:uniq password_digest:string full_name:string role:string department:string external_1c_id:string synced_from_1c_at:datetime metadata:jsonb
+
 bin/rails g model Session user:references ip_address:string user_agent:string
 
+# 5. ⭐ НОВОЕ: Установить paper_trail (audit trail)
+bin/rails generate paper_trail:install --with-changes
+
+# 6. Запустить миграции
 bin/rails db:migrate
 ```
 
@@ -71,15 +92,26 @@ bin/rails db:migrate
 ```ruby
 # В rails console
 org = Organization.create!(name: "Test Corp", slug: "test", plan_type: "trial")
-user = org.users.create!(email: "test@test.com", password: "password123", role: "owner")
+user = org.users.create!(
+  email: "test@test.com", 
+  password: "password123", 
+  role: "owner",
+  metadata: { personnel_number: "00001" }  # ⭐ JSONB работает!
+)
 user.authenticate("password123")  # Должно вернуть user
+
+# ⭐ НОВОЕ: Проверка paper_trail
+user.update(full_name: "Петр Петров")
+user.versions.last.changeset
+# => {"full_name"=>[nil, "Петр Петров"]}
 ```
 
 **Тесты (написать в конце дня):**
 - `test/models/organization_test.rb` (валидация slug uniqueness)
 - `test/models/user_test.rb` (has_secure_password работает)
+- **НОВОЕ:** `test/models/user_test.rb` (paper_trail tracking работает)
 
-**Время:** ~6-7 часов
+**Время:** ~7-8 часов (+1 час на PostgreSQL setup)
 
 ---
 
