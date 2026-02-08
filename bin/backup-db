@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Database Backup Script
+# Использование: ./bin/backup-db
+
+BACKUP_DIR="./backups/db"
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+BACKUP_FILE="$BACKUP_DIR/industrialprofi_$TIMESTAMP.sql"
+
+# Создаём директорию для бэкапов
+mkdir -p "$BACKUP_DIR"
+
+echo "🗄️  Создание backup базы данных..."
+echo "   Файл: $BACKUP_FILE"
+
+# Создаём дамп базы данных из Docker контейнера
+docker-compose exec -T postgres pg_dump -U postgres industrialprofi_development > "$BACKUP_FILE"
+
+if [ $? -eq 0 ]; then
+    # Получаем размер файла
+    SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
+    
+    echo "✅ Backup создан успешно!"
+    echo "   Размер: $SIZE"
+    echo "   Путь: $BACKUP_FILE"
+    echo ""
+    
+    # Показываем список бэкапов
+    echo "📋 Существующие backups:"
+    ls -lh "$BACKUP_DIR"/*.sql 2>/dev/null | awk '{print "   " $9 " (" $5 ")"}'
+    
+    # Удаляем старые бэкапы (оставляем последние 10)
+    echo ""
+    echo "🧹 Очистка старых backups (оставляем последние 10)..."
+    ls -t "$BACKUP_DIR"/*.sql 2>/dev/null | tail -n +11 | xargs -r rm
+    
+    echo ""
+    echo "💡 Восстановление из backup:"
+    echo "   docker-compose exec -T postgres psql -U postgres industrialprofi_development < $BACKUP_FILE"
+else
+    echo "❌ Ошибка при создании backup!"
+    echo "   Убедитесь что база данных запущена: docker-compose ps"
+    exit 1
+fi
