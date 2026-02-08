@@ -1,91 +1,195 @@
 # V7 Industrialprofi Platform V7
 
-This application is built using the "Modern Monolith" stack, leveraging the latest features of Rails 8 combined with a modern React frontend via Inertia.js and Vite.
+Платформа построена на современном монолитном стеке с использованием последних функций Rails 8 в сочетании с современным React frontend через Inertia.js и Vite.
+
+## 📚 Документация
+
+### Для начала работы
+- 📗 **[guides/QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md)** - Быстрая шпаргалка (начните здесь!)
+- 📗 **[guides/DEVELOPMENT_WORKFLOW.md](guides/DEVELOPMENT_WORKFLOW.md)** - Полное руководство по разработке
+- 📗 **[guides/TMUX_SETUP.md](guides/TMUX_SETUP.md)** - Настройка tmux окружения
+
+### Техническая документация
+- 📘 **[docs/README.md](docs/README.md)** - Оглавление технической документации
+- 📘 **[docs/02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md)** - Архитектура проекта
+- 📘 **[docs/03_DATABASE.md](docs/03_DATABASE.md)** - Структура базы данных
+
+### Структура документации
+- 📄 **[DOCS_STRUCTURE.md](DOCS_STRUCTURE.md)** - Организация документации
+
+---
 
 ## Tech Stack & Versions
 
-We strictly adhere to specific versions to ensure stability and compatibility.
-
 ### Core
-*   **Ruby:** `3.4.1`
-*   **Rails:** `8.0.1`
-*   **Node.js:** `22.12.0` (LTS)
-*   **Database:** SQLite3 (configured with WAL mode & `synchronous: normal` for production performance)
+- **Ruby:** `3.4.1`
+- **Rails:** `8.0.1`
+- **Node.js:** `22.12.0` (LTS)
+- **Database:** PostgreSQL (через Docker)
 
 ### Frontend
-*   **Framework:** React 19 (via Inertia.js Rails Adapter)
-*   **Build Tool:** Vite 7 (via `vite_rails`)
-*   **Styling:** Tailwind CSS 3.4
-*   **Package Manager:** npm
+- **Framework:** React 19 (via Inertia.js)
+- **Build Tool:** Vite 7
+- **Styling:** Tailwind CSS 3.4
+- **Package Manager:** npm
 
 ### Rails 8 "Solid" Infrastructure
-*   **Queue:** Solid Queue (DB-backed)
-*   **Cache:** Solid Cache (DB-backed)
-*   **Cable:** Solid Cable (DB-backed)
+- **Queue:** Solid Queue (DB-backed)
+- **Cache:** Solid Cache (DB-backed)
+- **Cable:** Solid Cable (DB-backed)
 
-## Prerequisites
+---
 
-We use **[mise](https://mise.jdx.dev/)** to manage language versions. Please ensure it is installed on your system.
+## 🚀 Quick Start
 
-## Setup
+### Prerequisites
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd v7-industrialprofi-platform-v7
-    ```
+Используем **[mise](https://mise.jdx.dev/)** для управления версиями языков.
 
-2.  **Install Language Versions (Ruby & Node):**
-    ```bash
-    mise install
-    ```
+### Setup
 
-3.  **Install Dependencies:**
-    ```bash
-    gem install bundler
-    bundle install
-    npm install
-    ```
+```bash
+# 1. Clone repository
+git clone <repository_url>
+cd v7-industrialprofi-platform-v7
 
-4.  **Database Setup:**
-    ```bash
-    bin/rails db:prepare
-    ```
+# 2. Install language versions
+mise install
 
-## Running the Application
+# 3. Install dependencies
+gem install bundler
+bundle install
+npm install
 
-To start the Rails server and the Vite dev server concurrently:
+# 4. Setup Git workflow (один раз)
+./bin/git-setup
 
+# 5. Start database
+docker-compose up -d
+
+# 6. Database setup
+bin/rails db:prepare
+```
+
+### Running the Application
+
+**Рекомендуемый способ (tmux):**
+```bash
+./bin/tmux-dev
+```
+
+**Альтернативный способ:**
 ```bash
 bin/dev
 ```
 
-Visit `http://localhost:3000`.
-
-## Debugging: Split Logs with Tmux
-
-For a better development experience, it is recommended to run the Backend (Rails) and Frontend (Vite) in separate consoles. This keeps the logs clean and readable.
-
-**Manual Setup:**
-1.  Open **Terminal 1** (Backend):
-    ```bash
-    bin/rails s
-    ```
-2.  Open **Terminal 2** (Frontend):
-    ```bash
-    bin/vite dev
-    ```
-
-**Tmux One-Liner:**
-If you use `tmux`, you can launch both in a split view with a single command:
-
+**Ручной запуск:**
 ```bash
-tmux new-session -s dev "bin/rails s" \; split-window -h "bin/vite dev" \; attach
+# Terminal 1 - Rails
+bin/rails s
+
+# Terminal 2 - Vite
+bin/vite dev
 ```
 
-## Directory Structure
+Откройте `http://localhost:3000`
 
-*   `app/frontend`: All frontend assets (React components, styles, entrypoints).
-*   `app/javascript`: (Legacy/Unused) Standard Rails JS folder.
-*   `config/database.yml`: SQLite optimized configuration.
-*   `vite.config.ts`: Vite configuration.
+---
+
+## 📁 Directory Structure
+
+```
+v7-industrialprofi-platform-v7/
+├── app/
+│   ├── frontend/          # React компоненты, стили
+│   ├── models/            # Rails модели
+│   ├── controllers/       # Rails контроллеры
+│   └── views/             # Rails views (минимальные)
+│
+├── docs/                  # 📘 Техническая документация (для ИИ)
+│   ├── README.md
+│   ├── 02_ARCHITECTURE.md
+│   └── ...
+│
+├── guides/                # 📗 Руководства (для разработчика)
+│   ├── QUICK_REFERENCE.md
+│   ├── DEVELOPMENT_WORKFLOW.md
+│   └── TMUX_SETUP.md
+│
+├── bin/                   # Скрипты
+│   ├── dev               # Запуск Rails + Vite
+│   ├── tmux-dev          # Tmux окружение
+│   ├── git-setup         # Настройка Git
+│   ├── backup-db         # Backup базы
+│   └── restore-db        # Restore базы
+│
+├── config/
+│   ├── database.yml
+│   └── vite.json
+│
+└── docker-compose.yml     # PostgreSQL
+```
+
+---
+
+## 🛠️ Полезные команды
+
+### Development
+
+```bash
+# Запуск приложения (tmux)
+./bin/tmux-dev
+
+# База данных
+docker-compose up -d              # Запустить
+docker-compose ps                 # Статус
+docker-compose logs -f postgres   # Логи
+
+# Backup/Restore
+./bin/backup-db                   # Создать backup
+./bin/restore-db backups/db/file.sql
+
+# Rails
+rails c                           # Console
+rails db:migrate                  # Миграции
+rails routes                      # Маршруты
+rails test                        # Тесты
+```
+
+### Git Workflow
+
+```bash
+# Новая фича
+git checkout -b feature/my-feature
+
+# Частые коммиты
+git add .
+git commit -m "Add feature"
+
+# Merge в main
+git checkout main
+git merge feature/my-feature --no-ff
+git push origin main
+```
+
+Подробнее: [guides/QUICK_REFERENCE.md](guides/QUICK_REFERENCE.md)
+
+---
+
+## 🎯 Процесс разработки
+
+1. **Начните с руководства:** [guides/DEVELOPMENT_WORKFLOW.md](guides/DEVELOPMENT_WORKFLOW.md)
+2. **Настройте Git:** `./bin/git-setup`
+3. **Изучите структуру:** [docs/02_ARCHITECTURE.md](docs/02_ARCHITECTURE.md)
+4. **Коммитьте часто:** Каждые 30-60 минут
+5. **Main всегда рабочий:** Работайте через feature ветки
+
+---
+
+## 📖 Contributing
+
+См. [guides/DEVELOPMENT_WORKFLOW.md](guides/DEVELOPMENT_WORKFLOW.md) для полной информации о процессе разработки.
+
+---
+
+*Последнее обновление: февраль 2026*
