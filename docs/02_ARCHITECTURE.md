@@ -96,6 +96,7 @@
 │    │  Models (ActiveRecord)      │      │
 │    │  - Organization             │      │
 │    │  - Roadmap                  │      │
+│    │  - JobTitle 👔 NEW          │      │
 │    │  - Skill                    │      │
 │    │  - UserProgress             │      │
 │    │  - Version (paper_trail) ⭐ │      │
@@ -106,6 +107,7 @@
 │       Database (PostgreSQL 16)          │
 │    - organizations                      │
 │    - roadmaps                           │
+│    - job_titles 👔 NEW                  │
 │    - skills                             │
 │    - skill_dependencies                 │
 │    - permit_templates (global)          │
@@ -117,6 +119,7 @@
 ```
 
 **⭐ Новое в архитектуре:**
+- `job_titles` — должности с обязательными допусками и картой профессии 👔
 - `users.external_1c_id` — для синхронизации с 1С:ЗУП (v2)
 - `versions` — таблица paper_trail для audit trail
 - `OneC::SyncService` — заготовка для интеграции (v2)

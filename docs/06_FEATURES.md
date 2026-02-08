@@ -382,7 +382,215 @@ roadmaps = Roadmap.where('title ILIKE ?', "%#{params[:q]}%")
 
 ---
 
-## 12. 🎯 Permissions & Authorization
+## 12. 👔 Управление Должностями (Job Titles)
+
+### Концепция: Гибридная Модель
+
+**Проблема:** Как связать должность с навыками?
+- ❌ Вариант A: Должность → только список навыков (жесткая связь)
+- ❌ Вариант B: Должность → только Roadmap (но какие навыки обязательны?)
+- ✅ **Вариант C (реализован): Гибрид**
+
+**Структура JobTitle:**
+```ruby
+class JobTitle < ApplicationRecord
+  belongs_to :organization
+  belongs_to :roadmap, optional: true  # Карта профессии (для развития)
+  
+  # JSONB массив ID обязательных допусков
+  attribute :required_permit_template_ids, :jsonb, default: []
+end
+```
+
+### Разделение Ответственности
+
+**🔴 Обязательные допуски** (`required_permit_template_ids`):
+- **Назначение:** Юридические требования (без них на работу не пустят)
+- **Источник:** Выбираются из глобального каталога `PermitTemplate`
+- **Пример:** Сварщик → [НАКС, Электробезопасность II, Газосварщик]
+- **Проверка:** Dashboard показывает compliance (у кого нет обязательных допусков)
+
+**🗺️ Карта профессии** (`roadmap_id`):
+- **Назначение:** План развития сотрудника (обучение, growth)
+- **Источник:** Roadmap с 20+ навыками (не все обязательны!)
+- **Пример:** Roadmap "Сварщик" → MIG сварка, TIG сварка, чтение чертежей...
+- **MVP:** Опциональное поле (можно оставить пустым)
+
+---
+
+### User Story: Manager Создает Должность
+
+**Сценарий:**
+1. Manager открывает `/organizations/job_titles/new`
+2. Заполняет форму:
+   - Название: "Сварщик 5 разряда"
+   - Описание обязанностей
+   - Выбирает обязательные допуски (checkboxes из каталога)
+   - *Опционально:* Выбирает Roadmap "Сварщик" для развития
+3. Сохраняет → должность создана
+
+**UI Form:**
+```tsx
+<form onSubmit={handleSubmit}>
+  <Input 
+    label="Название должности" 
+    name="title" 
+    required 
+    placeholder="Сварщик 5 разряда"
+  />
+  
+  <Textarea 
+    label="Описание обязанностей" 
+    name="description"
+    placeholder="Выполнение сварочных работ повышенной сложности..."
+  />
+  
+  {/* ОБЯЗАТЕЛЬНЫЕ ДОПУСКИ (критично) */}
+  <fieldset className="border-red-200">
+    <legend className="text-red-700">
+      Обязательные допуски (без них на работу не пустят)
+    </legend>
+    <div className="grid grid-cols-2 gap-2">
+      {permitTemplates.map(permit => (
+        <Checkbox 
+          key={permit.id}
+          label={`${permit.title} (${permit.expiration_months} мес)`}
+          checked={formData.required_permit_template_ids.includes(permit.id)}
+          onChange={() => togglePermit(permit.id)}
+        />
+      ))}
+    </div>
+  </fieldset>
+  
+  {/* КАРТА ПРОФЕССИИ (опционально) */}
+  <Select 
+    label="Карта профессии (для развития сотрудника)"
+    name="roadmap_id"
+    options={organizationRoadmaps}
+    placeholder="Не выбрано (можно добавить позже)"
+  />
+  
+  <div className="text-sm text-gray-500">
+    Совет: Сначала укажите только обязательные допуски. 
+    Roadmap можно добавить позже, когда создадите его.
+  </div>
+  
+  <Button type="submit">Сохранить должность</Button>
+</form>
+```
+
+---
+
+### User Story: Автоназначение Roadmap при Приеме на Должность
+
+**Сценарий:**
+1. Manager назначает сотруднику должность "Сварщик 5 разряда"
+2. У должности указан `roadmap_id = 5` (Roadmap "Сварщик")
+3. **Автоматически:** сотруднику назначается этот Roadmap
+
+**Логика (Backend):**
+```ruby
+# app/models/user.rb
+class User < ApplicationRecord
+  belongs_to :job_title, optional: true
+  
+  after_update :assign_roadmap_from_job_title, if: :job_title_id_changed?
+  
+  private
+  
+  def assign_roadmap_from_job_title
+    return unless job_title&.roadmap_id
+    
+    # Проверяем, нет ли уже этого roadmap
+    return if user_progresses.exists?(
+      skill_id: job_title.roadmap.skill_ids
+    )
+    
+    # Назначаем roadmap (создаем UserProgress записи со статусом 'todo')
+    job_title.roadmap.skills.find_each do |skill|
+      user_progresses.create!(
+        skill: skill,
+        status: 'todo'
+      )
+    end
+  end
+end
+```
+
+---
+
+### Manager Dashboard: Compliance Check
+
+**Виджет "Сотрудники с недостающими допусками":**
+
+```tsx
+<Card className="border-red-400">
+  <h3>⚠️ Требуют внимания (отсутствуют обязательные допуски)</h3>
+  
+  {employeesWithIssues.map(employee => (
+    <div key={employee.id} className="border-l-4 border-red-500 pl-3">
+      <strong>{employee.full_name}</strong> ({employee.job_title?.title})
+      <ul className="text-sm text-red-600">
+        {employee.missing_required_permits.map(permit => (
+          <li key={permit.id}>
+            ❌ {permit.title} — {permit.status === 'expired' ? 'Истек' : 'Отсутствует'}
+          </li>
+        ))}
+      </ul>
+    </div>
+  ))}
+</Card>
+```
+
+**Backend Query:**
+```ruby
+# app/services/compliance_checker.rb
+class ComplianceChecker
+  def initialize(organization)
+    @organization = organization
+  end
+  
+  def employees_with_missing_required_permits
+    @organization.users.includes(:job_title).select do |user|
+      next unless user.job_title
+      
+      required_permit_ids = user.job_title.required_permit_template_ids
+      next if required_permit_ids.empty?
+      
+      # Находим допуски пользователя
+      completed_permit_ids = user.user_progresses
+        .joins(skill: :permit_template)
+        .where(status: ['completed', 'expiring_soon'])
+        .pluck('permit_templates.id')
+      
+      # Есть ли недостающие?
+      missing = required_permit_ids - completed_permit_ids
+      missing.any?
+    end
+  end
+end
+```
+
+---
+
+### MVP vs MVP+
+
+**MVP (текущая реализация):**
+- ✅ CRUD для JobTitle (Manager/Owner)
+- ✅ Поле `required_permit_template_ids` (обязательно)
+- ✅ Поле `roadmap_id` (опционально, показываем в UI)
+- ✅ Автоназначение roadmap при job_title_id_changed
+- ✅ Dashboard: compliance check
+
+**MVP+ (после первых продаж):**
+- 🚀 UI для назначения job_title сотруднику (сейчас через rails console)
+- 🚀 Страница "Все должности организации" с фильтрами
+- 🚀 Аналитика: "Сколько сотрудников прошли roadmap своей должности"
+- 🚀 Массовое назначение должности (выбрать несколько сотрудников)
+
+---
+
+## 13. 🎯 Permissions & Authorization
 
 ### Уровни Доступа:
 
@@ -399,6 +607,7 @@ roadmaps = Roadmap.where('title ILIKE ?', "%#{params[:q]}%")
 - ✅ Создание roadmaps
 - ✅ Просмотр прогресса сотрудников своего отдела
 - ✅ Просмотр матрицы навыков
+- ✅ 👔 Управление должностями (создание, редактирование)
 - ❌ Управление подпиской
 
 #### Owner:

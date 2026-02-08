@@ -187,7 +187,7 @@ app/frontend/pages/Dashboard/Index.tsx
 ### День 4: Roadmaps & Skills Models + Seeds
 
 **Задачи:**
-- [ ] Миграции: `roadmaps`, `skills`, `skill_dependencies`, `permit_templates`
+- [ ] Миграции: `roadmaps`, `skills`, `skill_dependencies`, `permit_templates`, `job_titles` 👔
 - [ ] Models с associations
 - [ ] Seeds: Permit Templates (10 типовых допусков СНГ)
 - [ ] Seeds: 1 публичный roadmap "Сварщик" (через YAML)
@@ -198,6 +198,9 @@ bin/rails g model Roadmap organization:references forked_from:references title:s
 bin/rails g model Skill roadmap:references permit_template:references key:string title:string skill_type:string position_x:float position_y:float
 bin/rails g model SkillDependency from_skill:references to_skill:references kind:string
 bin/rails g model PermitTemplate title:string code:string country_code:string expiration_months:integer category:string
+
+# 👔 НОВОЕ: Должности (Гибридная модель)
+bin/rails g model JobTitle organization:references roadmap:references title:string description:text required_permit_template_ids:jsonb
 ```
 
 **YAML Roadmap:**
@@ -238,6 +241,15 @@ end
 # rails console
 Roadmap.public_templates.count  # => 1
 PermitTemplate.where(country_code: 'RU').count  # => 10
+
+# 👔 НОВОЕ: Проверка JobTitle
+job_title = JobTitle.create!(
+  organization_id: Organization.first.id,
+  title: "Сварщик 5 разряда",
+  required_permit_template_ids: [1, 5, 7],  # Обязательные допуски
+  roadmap_id: Roadmap.find_by(slug: 'welder')&.id  # Карта профессии (опционально)
+)
+job_title.required_permit_template_ids  # => [1, 5, 7]
 ```
 
 **Время:** ~8 часов
@@ -951,12 +963,14 @@ end
 
 ---
 
-### День 20: Manager Dashboard + Матрица Навыков
+### День 20: Manager Dashboard + Матрица Навыков + Управление Должностями 👔
 
 **Задачи:**
 - [ ] Страница "Сотрудники отдела"
 - [ ] Матрица навыков (таблица)
 - [ ] Фильтр по отделу
+- [ ] 👔 CRUD для должностей (Organizations::JobTitlesController)
+- [ ] 👔 UI для выбора обязательных допусков и карты профессии
 - [ ] Export в CSV (опционально)
 
 **Матрица:**
@@ -1001,8 +1015,93 @@ end
 - Таблица показывает матрицу навыков
 - Фильтр по отделу работает
 - Менеджер видит только свой отдел
+- 👔 Можно создать должность с обязательными допусками
+- 👔 Можно назначить карту профессии должности (опционально)
 
 **Время:** ~8 часов
+
+---
+
+### 👔 НОВОЕ: Управление Должностями (Встроено в День 20)
+
+**JobTitle Form (UI):**
+```tsx
+<form onSubmit={handleSubmit}>
+  <Input label="Название должности" name="title" required />
+  <Textarea label="Описание обязанностей" name="description" />
+  
+  {/* Обязательные допуски (критично для compliance) */}
+  <fieldset>
+    <legend>Обязательные допуски</legend>
+    {permitTemplates.map(permit => (
+      <Checkbox 
+        key={permit.id}
+        label={permit.title}
+        checked={selectedPermits.includes(permit.id)}
+        onChange={() => togglePermit(permit.id)}
+      />
+    ))}
+  </fieldset>
+  
+  {/* Карта профессии (опционально, для развития) */}
+  <Select 
+    label="Карта профессии (опционально)"
+    name="roadmap_id"
+    options={roadmaps}
+    placeholder="Не выбрано"
+  />
+  
+  <Button type="submit">Сохранить</Button>
+</form>
+```
+
+**Backend:**
+```ruby
+# app/controllers/organizations/job_titles_controller.rb
+class Organizations::JobTitlesController < Organizations::BaseController
+  before_action :require_manager!
+  
+  def create
+    @job_title = current_organization.job_titles.build(job_title_params)
+    
+    if @job_title.save
+      redirect_to organizations_job_titles_path, notice: "Должность создана"
+    else
+      render :new, status: :unprocessable_entity
+    end
+  end
+  
+  private
+  
+  def job_title_params
+    params.require(:job_title).permit(
+      :title, 
+      :description, 
+      :roadmap_id,
+      required_permit_template_ids: []
+    )
+  end
+end
+```
+
+**Логика автоназначения roadmap:**
+```ruby
+# app/models/user.rb
+class User < ApplicationRecord
+  belongs_to :job_title, optional: true
+  
+  after_update :assign_roadmap_from_job_title, if: :job_title_id_changed?
+  
+  private
+  
+  def assign_roadmap_from_job_title
+    return unless job_title&.roadmap_id
+    
+    # Автоматически назначаем roadmap из должности
+    RoadmapAssignmentService.new(self, job_title.roadmap).call
+  end
+end
+```
 
 ---
 
